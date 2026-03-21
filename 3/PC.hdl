@@ -9,9 +9,15 @@
  * else              out(t+1) = out(t)
  */
 CHIP PC {
-    IN in[16],inc, load, reset;
+    IN in[16], inc, load, reset;
     OUT out[16];
     
     PARTS:
-    //// Replace this comment with your code.
+    Inc16(in=prevCount, out=incCount);
+
+    Mux16(a=prevCount, b=incCount, sel=inc, out=incOrPass);
+    Mux16(a=incOrPass, b=in, sel=load, out=loadOrPass);
+    Mux16(a=loadOrPass, b=false, sel=reset, out=zeroOrPass);
+
+    Register(in=zeroOrPass, load=true, out=prevCount, out=out);
 }
