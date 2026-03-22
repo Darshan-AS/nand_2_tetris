@@ -21,6 +21,12 @@ CHIP CPU {
 
     IN  inM[16],         // M value input  (M = contents of RAM[A])
         instruction[16], // Instruction for execution
+                         // (A-instruction: 0 vvvvvvvvvvvvvvv, where v = value bit)
+                         // (C-instruction: 1 xx a cccccc ddd jjj, where x = unused bits, a = a-bit, c = comp bits, d = dest bits, j = jump bits)
+                         // (Instruction[12]: a = 0 => read M, a = 1 => read A)
+                         // (Instruction[6..11]: cccccc = set zx, nx, zy, ny, f, no)
+                         // (Instruction[3...5]: ddd = set A, D, M)
+                         // (Instruction[0...2]: jjj = set JLT, JEQ, JGT)
         reset;           // Signals whether to re-start the current
                          // program (reset==1) or continue executing
                          // the current program (reset==0).
@@ -31,5 +37,34 @@ CHIP CPU {
         pc[15];          // address of next instruction
 
     PARTS:
-	//// Replace this comment with your code.
+    // Which instruction to execute: A or C?
+    And(a=instruction[15], b=true, out=isCInstruction);
+    Not(in=isCInstruction, out=isAInstruction);
+
+    And(a=isCInstruction, b=instruction[5], out=isCWriteA);
+    Or(a=isCWriteA, b=isAInstruction, out=loadA);
+    Mux16(a=instruction, b=outALU, sel=isCWriteA, out=inA);
+    ARegister(in=inA, load=loadA, out=outA, out[0..14]=addressM);     // Already given wrapper for A Register
+
+    And(a=isCInstruction, b=instruction[4], out=loadD);
+    DRegister(in=outALU, load=loadD, out=outD);     // Already given wrapper for D Register
+
+    Mux16(a=outA, b=inM, sel=instruction[12], out=outAOrM);
+
+	ALU(x=outD, y=outAOrM, zx=instruction[11], nx=instruction[10], zy=instruction[9], ny=instruction[8], f=instruction[7], no=instruction[6], out=outM, out=outALU, zr=outIsZero, ng=outIsNegative);
+    
+    And(a=isCInstruction, b=instruction[3], out=writeM);
+
+    Or(a=outIsZero, b=outIsNegative, out=outIsZeroOrNegative);
+    Not(in=outIsZeroOrNegative, out=outIsPositive);
+
+    And(a=outIsNegative, b=instruction[2], out=isJLT);
+    And(a=outIsZero, b=instruction[1], out=isJEQ);
+    And(a=outIsPositive, b=instruction[0], out=isJGT);
+
+    Or8Way(in[2]=isJLT, in[1]=isJEQ, in[0]=isJGT, out=isJMP);
+    And(a=isCInstruction, b=isJMP, out=loadPC);
+    Not(in=loadPC, out=incPC);
+
+    PC(in=outA, load=loadPC, inc=incPC, reset=reset, out[0..14]=pc);
 }
